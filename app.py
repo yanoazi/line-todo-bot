@@ -17,6 +17,7 @@ from models import (
     get_pending_tasks_by_member_id, get_pending_tasks_by_group_id,
     create_member, create_task # Import necessary helpers
 )
+from sqlalchemy import text
 from sqlalchemy.orm import Session # Import Session for type hinting
 
 # --- LINE SDK Imports (v2) ---
@@ -108,7 +109,7 @@ def ping():
     try:
         with get_db() as db:
             # Simple query to check connection
-            db.execute("SELECT 1")
+            db.execute(text("SELECT 1"))
             db_ok = True
     except Exception as e:
         logger.error(f"Ping DB check failed: {e}")
