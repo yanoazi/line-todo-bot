@@ -1,0 +1,9 @@
+# .gitignore
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+line_bot.db # SQLite 資料庫檔案不應上傳
+*.log
