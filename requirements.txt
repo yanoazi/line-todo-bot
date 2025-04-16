@@ -1,0 +1,7 @@
+Flask==2.3.3
+line-bot-sdk==2.3.0
+python-dotenv==1.0.0
+gunicorn==21.2.0
+requests==2.31.0
+psycopg2-binary
+SQLAlchemy>=2.0.0
