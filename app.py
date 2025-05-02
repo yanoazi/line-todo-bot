@@ -596,16 +596,16 @@ def handle_recurring_list(reply_token: str, group_id: str, db: Session): # New h
             task_list_text = f"📋 {title} 📋 ({len(recurring_tasks)} 個)\n\n";
             for task in recurring_tasks: pattern_text = format_recurrence_pattern(task.recurrence_pattern); member_name = task.member.name if task.member else '未知'; task_list_text += f"• T-{task.id}: @{member_name} - {task.content[:20]}... ({pattern_text}) - 已生成 {task.recurrence_count} 次\n  操作: #詳情 T-{task.id} | #取消定期 T-{task.id}\n\n"
             # Split long messages...
-                max_len = 4900
-                messages_to_send = []
-                while len(task_list_text) > max_len:
-                    split_pos = task_list_text.rfind('\n\n', 0, max_len)
-                    if split_pos == -1:
-                        split_pos = max_len
-                    messages_to_send.append(TextSendMessage(text=task_list_text[:split_pos]))
-                    task_list_text = task_list_text[split_pos:].lstrip()
-                messages_to_send.append(TextSendMessage(text=task_list_text))
-                line_bot_api.reply_message(reply_token, messages=messages_to_send)
+            max_len = 4900
+            messages_to_send = []
+            while len(task_list_text) > max_len:
+                split_pos = task_list_text.rfind('\n\n', 0, max_len)
+                if split_pos == -1:
+                    split_pos = max_len
+                messages_to_send.append(TextSendMessage(text=task_list_text[:split_pos]))
+                task_list_text = task_list_text[split_pos:].lstrip()
+            messages_to_send.append(TextSendMessage(text=task_list_text))
+            line_bot_api.reply_message(reply_token, messages=messages_to_send)
     except SQLAlchemyError as e: logger.exception(f"列出定期任務DB失敗: {e}"); line_bot_api.reply_message(reply_token, TextSendMessage(text="查詢定期任務列表DB錯誤。"))
     except Exception as e: logger.exception(f"列出定期任務未知錯誤: {e}"); line_bot_api.reply_message(reply_token, TextSendMessage(text="處理定期列表請求內部錯誤。"))
 
