@@ -17,7 +17,7 @@ from models import (
     get_pending_tasks_by_member_id, get_pending_tasks_by_group_id,
     create_member, create_task
 )
-from sqlalchemy import text, or_, orm
+from sqlalchemy import text, or_,orm
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -284,22 +284,16 @@ def parse_recurrence_input(text: str) -> (Optional[str], Optional[str]):
     pattern_map_week = { "週一": "weekly_monday", "週二": "weekly_tuesday", "週三": "weekly_wednesday", "週四": "weekly_thursday", "週五": "weekly_friday", "週六": "weekly_saturday", "週日": "weekly_sunday" }
     if text == "每天": system_pattern = "daily"; user_friendly_pattern = "每天"
     elif text.startswith("每週") and text[2:] in pattern_map_week: day_zh = text[2:]; system_pattern = pattern_map_week[day_zh]; user_friendly_pattern = f"每週{day_zh}"
-    elif text.startswith("每月") and text.endswith("日"):
-        day_str = text[2:-1]
-        if day_str.isdigit() and 1 <= int(day_str) <= 31:
-            day_num = int(day_str)
-            system_pattern = f"monthly_{day_num}"
-            user_friendly_pattern = f"每月{day_num}日"
+    elif text.startswith("每月") and text.endswith("日"): day_str = text[2:-1];
+    if day_str.isdigit() and 1 <= int(day_str) <= 31: day_num = int(day_str); system_pattern = f"monthly_{day_num}"; user_friendly_pattern = f"每月{day_num}日"
     elif text.startswith("每年") and "月" in text and text.endswith("日"):
         try:
             match = re.match(r"每年(\d{1,2})月(\d{1,2})日", text)
-            if match:
-                month, day = int(match.group(1)), int(match.group(2))
-                if 1 <= month <= 12 and 1 <= day <= 31:
-                    system_pattern = f"yearly_{month}_{day}"
-                    user_friendly_pattern = f"每年{month}月{day}日"
+            if match: month, day = int(match.group(1)), int(match.group(2));
+            if 1 <= month <= 12 and 1 <= day <= 31: system_pattern = f"yearly_{month}_{day}"; user_friendly_pattern = f"每年{month}月{day}日"
         except (ValueError, IndexError):
-            pass
+             pass # Correctly indented pass for the except block
+    # Correctly indented logger and return
     logger.debug(f"Parsed recurrence input '{text}' to system='{system_pattern}', user='{user_friendly_pattern}'")
     return system_pattern, user_friendly_pattern
 
@@ -412,16 +406,9 @@ def handle_list_tasks(reply_token: str, match: re.Match, group_id: str, db: Sess
         try: bubble_json = create_task_list_bubble(title, tasks, db); line_bot_api.reply_message(reply_token, messages=[FlexSendMessage(alt_text=title, contents=bubble_json)])
         except Exception as e: logger.exception(f"創建/發送 Flex 列表失敗: {e}"); task_list_text = create_task_list_text(title, tasks, db)
             # Split long messages...
-        max_len = 4900
-        messages_to_send = []
-        while len(task_list_text) > max_len:
-            split_pos = task_list_text.rfind('\n\n', 0, max_len)
-            if split_pos == -1:
-                    split_pos = max_len
-                messages_to_send.append(TextSendMessage(text=task_list_text[:split_pos]))
-                task_list_text = task_list_text[split_pos:].lstrip()
-            messages_to_send.append(TextSendMessage(text=task_list_text))
-            line_bot_api.reply_message(reply_token, messages=messages_to_send)
+        max_len = 4900; messages_to_send = [];
+        while len(task_list_text) > max_len: split_pos = task_list_text.rfind('\n\n', 0, max_len); if split_pos == -1: split_pos = max_len; messages_to_send.append(TextSendMessage(text=task_list_text[:split_pos])); task_list_text = task_list_text[split_pos:].lstrip()
+        messages_to_send.append(TextSendMessage(text=task_list_text)); line_bot_api.reply_message(reply_token, messages=messages_to_send)
     except SQLAlchemyError as e: logger.exception(f"列出任務DB失敗: {e}"); line_bot_api.reply_message(reply_token, TextSendMessage(text="查詢任務列表DB錯誤。"))
     except Exception as e: logger.exception(f"列出任務未知錯誤: {e}"); line_bot_api.reply_message(reply_token, TextSendMessage(text="處理列表請求內部錯誤。"))
 def handle_delete_task(reply_token: str, match: re.Match, group_id: str, deleter_user_id: str, db: Session):
@@ -480,7 +467,7 @@ def handle_task_details(reply_token: str, match: re.Match, db: Session):
         recurring_info = []
         if task.is_recurring: pattern_text = format_recurrence_pattern(task.recurrence_pattern); recurring_info.extend([{"type": "separator", "margin": "md"}, {"type": "text", "text": f"⏰ 定期任務 ({pattern_text})", "size": "sm", "color": "#9C27B0", "margin": "sm"}, {"type": "text", "text": f"(已生成 {task.recurrence_count} 次)", "size": "xs", "color": "#9C27B0", "margin": "none"}])
         elif task.parent_task_id: parent_task = get_task_by_id(db, task_id=task.parent_task_id);
-            if parent_task: parent_pattern_text = format_recurrence_pattern(parent_task.recurrence_pattern); recurring_info.extend([{"type": "separator", "margin": "md"}, {"type": "text", "text": f"🔄 定期任務衍生 (來自 T-{parent_task.id})", "size": "sm", "color": "#757575", "margin": "sm", "wrap": True}, {"type": "text", "text": f"({parent_pattern_text})", "size": "xs", "color": "#757575", "margin": "none"}])
+        if parent_task: parent_pattern_text = format_recurrence_pattern(parent_task.recurrence_pattern); recurring_info.extend([{"type": "separator", "margin": "md"}, {"type": "text", "text": f"🔄 定期任務衍生 (來自 T-{parent_task.id})", "size": "sm", "color": "#757575", "margin": "sm", "wrap": True}, {"type": "text", "text": f"({parent_pattern_text})", "size": "xs", "color": "#757575", "margin": "none"}])
         try:
             contents = {"type": "bubble", "header": {"type": "box", "layout": "vertical", "contents": [{"type": "text", "text": f"任務詳情 T-{task_id_num}", "weight": "bold", "size": "lg"}]}, "body": {"type": "box", "layout": "vertical", "spacing": "md", "contents": [{"type": "text", "text": task.content, "wrap": True, "weight": "bold", "size": "xl"}, {"type": "box", "layout": "baseline", "margin": "md", "contents": [{"type": "text", "text": "負責人:", "size": "sm", "color": "#888888", "flex": 2, "margin": "sm"}, {"type": "text", "text": f"@{task.member.name}", "size": "sm", "color": "#1DB446", "flex": 4, "weight":"bold"}]}, {"type": "box", "layout": "baseline", "margin": "sm", "contents": [{"type": "text", "text": "優先級:", "size": "sm", "color": "#888888", "flex": 2, "margin": "sm"}, {"type": "text", "text": priority_display, "size": "sm", "color": priority_color, "flex": 4, "weight":"bold"}]}, {"type": "box", "layout": "baseline", "margin": "sm", "contents": [{"type": "text", "text": "狀態:", "size": "sm", "color": "#888888", "flex": 2, "margin": "sm"}, {"type": "text", "text": status_str + (f" ({completed_at_str})" if task.status == 'completed' and completed_at_str else ""), "size": "sm", "color": status_color, "flex": 4, "weight":"bold", "wrap":True}]}, {"type": "box", "layout": "baseline", "margin": "sm", "contents": [{"type": "text", "text": "截止日期:", "size": "sm", "color": "#888888", "flex": 2, "margin": "sm"}, {"type": "text", "text": due_date_str, "size": "sm", "color": "#888888", "flex": 4}]}, {"type": "box", "layout": "baseline", "margin": "sm", "contents": [{"type": "text", "text": "建立時間:", "size": "sm", "color": "#888888", "flex": 2, "margin": "sm"}, {"type": "text", "text": created_at_str, "size": "sm", "color": "#888888", "flex": 4}]}, *recurring_info]}, "footer": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": []}}
             footer_buttons = contents["footer"]["contents"]
@@ -489,21 +476,21 @@ def handle_task_details(reply_token: str, match: re.Match, db: Session):
             if task.is_recurring: footer_buttons.append({"type": "button", "style": "secondary", "color": "#9C27B0", "height": "sm", "action": {"type": "message", "label": "🚫 取消定期", "text": f"#取消定期 T-{task_id_num}"}})
             line_bot_api.reply_message(reply_token, FlexSendMessage(alt_text=f"任務 T-{task_id_num} 詳情", contents=contents)); return
         except Exception as e: logger.exception(f"創建任務詳情 Flex 失敗: {e}")
-            reply_text = f"🔍 任務詳情 T-{task_id_num} 🔍\n..."; line_bot_api.reply_message(reply_token, TextSendMessage(text=reply_text)) # Fallback text
+        reply_text = f"🔍 任務詳情 T-{task_id_num} 🔍\n..."; line_bot_api.reply_message(reply_token, TextSendMessage(text=reply_text)) # Fallback text
     except SQLAlchemyError as e: logger.exception(f"獲取任務詳情 T-{task_id_num} DB失敗: {e}"); line_bot_api.reply_message(reply_token, TextSendMessage(text=f"查詢任務 T-{task_id_num} 詳情DB錯誤。"))
     except Exception as e: logger.exception(f"獲取任務詳情 T-{task_id_num} 失敗: {e}"); line_bot_api.reply_message(reply_token, TextSendMessage(text=f"查詢任務 T-{task_id_num} 詳情內部錯誤。"))
 def handle_draw_lots(reply_token: str, match: re.Match): # Same
     question = match.group(1); results = ["聖筊 👍 (同意)", "陰筊 👎 (不同意)", "笑筊 🤔 (重新問)"]; result = random.choice(results); reply_text = f"❓ 問題: {question}\n✨ 結果: {result}"
     try: result_emoji = "👍" if "聖筊" in result else "👎" if "陰筊" in result else "🤔"; result_color = "#28a745" if "聖筊" in result else "#dc3545" if "陰筊" in result else "#ffc107"
-        contents = {"type": "bubble", "header": {"type": "box", "layout": "vertical", "contents": [{"type": "text", "text": "擲筊結果", "weight": "bold", "size": "lg"}]}, "body": {"type": "box", "layout": "vertical", "contents": [{"type": "text", "text": f"問題: {question}", "wrap": True, "weight": "bold", "size": "md", "margin":"md"}, {"type": "box", "layout": "vertical", "margin": "xl", "contents": [{"type": "text", "text": result, "size": "xxl", "align": "center", "color": result_color, "weight": "bold"}]}]}, "footer": {"type": "box", "layout": "vertical", "spacing":"sm", "contents": [{"type": "button", "style": "primary", "color": result_color, "height": "sm", "action": {"type": "message", "label": f"再擲一次 {result_emoji}", "text": f"#擲筊 {question}"}}]}}
-        line_bot_api.reply_message(reply_token, FlexSendMessage(alt_text=reply_text, contents=contents))
+    contents = {"type": "bubble", "header": {"type": "box", "layout": "vertical", "contents": [{"type": "text", "text": "擲筊結果", "weight": "bold", "size": "lg"}]}, "body": {"type": "box", "layout": "vertical", "contents": [{"type": "text", "text": f"問題: {question}", "wrap": True, "weight": "bold", "size": "md", "margin":"md"}, {"type": "box", "layout": "vertical", "margin": "xl", "contents": [{"type": "text", "text": result, "size": "xxl", "align": "center", "color": result_color, "weight": "bold"}]}]}, "footer": {"type": "box", "layout": "vertical", "spacing":"sm", "contents": [{"type": "button", "style": "primary", "color": result_color, "height": "sm", "action": {"type": "message", "label": f"再擲一次 {result_emoji}", "text": f"#擲筊 {question}"}}]}}
+    line_bot_api.reply_message(reply_token, FlexSendMessage(alt_text=reply_text, contents=contents))
     except Exception as e: logger.exception(f"創建擲筊 Flex 失敗: {e}"); line_bot_api.reply_message(reply_token, TextSendMessage(text=reply_text))
 def handle_random_pick(reply_token: str, match: re.Match): # Same
     options_text = match.group(1); options = [opt.strip() for opt in options_text.split() if opt.strip()]
     if not options: line_bot_api.reply_message(reply_token, TextSendMessage(text="請提供至少一個抽籤選項！")); return
     chosen = random.choice(options); reply_text = f"從 [{', '.join(options)}] {len(options)} 個選項中抽出：\n🎉 {chosen} 🎉"
     try: contents = {"type": "bubble", "header": {"type": "box", "layout": "vertical", "contents": [{"type": "text", "text": "抽籤結果", "weight": "bold", "size": "lg"}]}, "body": {"type": "box", "layout": "vertical", "contents": [{"type": "text", "text": f"從 {len(options)} 個選項中抽出：", "size": "md", "color": "#555555", "wrap":True, "margin":"md"}, {"type": "box", "layout": "vertical", "margin": "xl", "contents": [{"type": "text", "text": chosen, "size": "xxl", "align": "center", "weight": "bold", "wrap": True, "color":"#2196F3"}]}]}, "footer": {"type": "box", "layout": "vertical", "spacing":"sm", "contents": [{"type": "text", "text": f"選項: {', '.join(options)}", "size": "xs", "color": "#888888", "wrap": True, "margin":"md"}, {"type": "separator", "margin":"md"}, {"type": "button", "style": "primary", "color": "#2196F3", "height": "sm", "action": {"type": "message", "label": "再抽一次", "text": f"#抽籤 {options_text}"}}]}}
-        line_bot_api.reply_message(reply_token, FlexSendMessage(alt_text=reply_text, contents=contents))
+    line_bot_api.reply_message(reply_token, FlexSendMessage(alt_text=reply_text, contents=contents))
     except Exception as e: logger.exception(f"創建抽籤 Flex 失敗: {e}"); line_bot_api.reply_message(reply_token, TextSendMessage(text=reply_text))
 def handle_batch_add_tasks(reply_token: str, match: re.Match, group_id: str, adder_user_id: str, db: Session): # Same revised
     member_name = match.group(1); tasks_text = match.group(2).strip(); task_lines = [line.strip() for line in tasks_text.split('\n') if line.strip()]
@@ -517,29 +504,29 @@ def handle_batch_add_tasks(reply_token: str, match: re.Match, group_id: str, add
         priority = "normal"; content = task_line; due_date_str = None; due_date = None; error_msg = None
         priority_match = re.match(r'^!(低|普通|高)\s+(.+)$', task_line)
         if priority_match: p_tag = priority_match.group(1); content = priority_match.group(2).strip();
-            if p_tag == "低": priority = "low"; elif p_tag == "高": priority = "high"; else: priority = "normal"
+        if p_tag == "低": priority = "low"; elif p_tag == "高": priority = "high"; else: priority = "normal"
         else: content = task_line.strip()
         date_match = re.search(r'(?:^|\s)(\d{4}/\d{1,2}/\d{1,2})$', content)
         if date_match: due_date_str = date_match.group(1); content = content[:date_match.start()].strip(); due_date = parse_date(due_date_str)
-            if due_date is None: error_msg = f"日期格式錯誤 ({due_date_str})"
+        if due_date is None: error_msg = f"日期格式錯誤 ({due_date_str})"
         if not content: error_msg = "任務內容為空"
         if error_msg: failed_lines_info.append({'line': task_line, 'error': error_msg})
         else:
             try: task_obj = Task(member_id=member.id, content=content, due_date=due_date, priority=priority, status='pending'); tasks_to_add.append(task_obj); priority_display = priority_map_display.get(priority, priority); task_summary = f"{priority_display} {content}";
-                if due_date: task_summary += f" (截止: {due_date.strftime('%Y/%m/%d')})"; created_tasks_info.append({'summary_no_id': task_summary, 'obj': task_obj})
+            if due_date: task_summary += f" (截止: {due_date.strftime('%Y/%m/%d')})"; created_tasks_info.append({'summary_no_id': task_summary, 'obj': task_obj})
             except Exception as e: logger.exception(f"批量任務對象創建失敗: {e}"); failed_lines_info.append({'line': task_line, 'error': f"內部錯誤 ({type(e).__name__})"})
     final_summaries = [];
     if tasks_to_add:
         try:
             db.add_all(tasks_to_add); db.flush()
             for info in created_tasks_info: task_obj = info['obj'];
-                if task_obj.id: final_summaries.append(f"T-{task_obj.id}: {info['summary_no_id']}")
-                else: failed_lines_info.append({'line': info['summary_no_id'], 'error': "無法獲取任務ID"})
+            if task_obj.id: final_summaries.append(f"T-{task_obj.id}: {info['summary_no_id']}")
+            else: failed_lines_info.append({'line': info['summary_no_id'], 'error': "無法獲取任務ID"})
             db.commit(); logger.info(f"批量新增 {len(final_summaries)} 個任務成功 for {member.name}.")
         except SQLAlchemyError as e: db.rollback(); logger.exception(f"批量新增DB失敗: {e}");
-            for info in created_tasks_info: failed_lines_info.append({'line': info['summary_no_id'], 'error': "資料庫儲存失敗"}); final_summaries = []
+        for info in created_tasks_info: failed_lines_info.append({'line': info['summary_no_id'], 'error': "資料庫儲存失敗"}); final_summaries = []
         except Exception as e: db.rollback(); logger.exception(f"批量新增未知錯誤: {e}");
-            for info in created_tasks_info: failed_lines_info.append({'line': info['summary_no_id'], 'error': f"內部儲存錯誤 ({type(e).__name__})"}); final_summaries = []
+        for info in created_tasks_info: failed_lines_info.append({'line': info['summary_no_id'], 'error': f"內部儲存錯誤 ({type(e).__name__})"}); final_summaries = []
     success_count = len(final_summaries); failure_count = len(failed_lines_info)
     if success_count == 0 and failure_count == 0: line_bot_api.reply_message(reply_token, TextSendMessage(text="未提供有效的任務內容。")); return
     alt_text = f"批量新增結果：成功 {success_count}, 失敗 {failure_count} (為 @{member.name})"
@@ -548,9 +535,9 @@ def handle_batch_add_tasks(reply_token: str, match: re.Match, group_id: str, add
         line_bot_api.reply_message(reply_token, FlexSendMessage(alt_text=alt_text, contents=bubble_contents))
     except Exception as flex_err: logger.error(f"創建批量新增結果 Flex 失敗: {flex_err}"); reply_text = f"批量新增任務結果 (@{member.name})：\n..."; # Build text...
         # Split long messages...
-        max_len = 4900; messages_to_send = [];
-        while len(reply_text) > max_len: split_pos = reply_text.rfind('\n', 0, max_len); if split_pos == -1: split_pos = max_len; messages_to_send.append(TextSendMessage(text=reply_text[:split_pos])); reply_text = reply_text[split_pos:].lstrip()
-        messages_to_send.append(TextSendMessage(text=reply_text)); line_bot_api.reply_message(reply_token, messages=messages_to_send)
+    max_len = 4900; messages_to_send = [];
+    while len(reply_text) > max_len: split_pos = reply_text.rfind('\n', 0, max_len); if split_pos == -1: split_pos = max_len; messages_to_send.append(TextSendMessage(text=reply_text[:split_pos])); reply_text = reply_text[split_pos:].lstrip()
+    messages_to_send.append(TextSendMessage(text=reply_text)); line_bot_api.reply_message(reply_token, messages=messages_to_send)
 def handle_recurring_task(reply_token: str, match: re.Match, group_id: str, adder_user_id: str, db: Session): # For #定期 @... command
     member_name = match.group(1); priority_tag = match.group(2); task_content = match.group(3).strip(); recurrence_input = match.group(4)
     priority_map_display = {"low": "🟢 低", "normal": "🟡 普通", "high": "🔴 高"}; priority = "normal"
@@ -593,19 +580,12 @@ def handle_recurring_list(reply_token: str, group_id: str, db: Session): # New h
         try: bubble_json = create_recurring_list_bubble(title, recurring_tasks); line_bot_api.reply_message(reply_token, messages=[FlexSendMessage(alt_text=title, contents=bubble_json)])
         except Exception as e: logger.exception(f"創建/發送定期列表 Flex 失敗: {e}")
             # Fallback text...
-            task_list_text = f"📋 {title} 📋 ({len(recurring_tasks)} 個)\n\n";
-            for task in recurring_tasks: pattern_text = format_recurrence_pattern(task.recurrence_pattern); member_name = task.member.name if task.member else '未知'; task_list_text += f"• T-{task.id}: @{member_name} - {task.content[:20]}... ({pattern_text}) - 已生成 {task.recurrence_count} 次\n  操作: #詳情 T-{task.id} | #取消定期 T-{task.id}\n\n"
+        task_list_text = f"📋 {title} 📋 ({len(recurring_tasks)} 個)\n\n";
+        for task in recurring_tasks: pattern_text = format_recurrence_pattern(task.recurrence_pattern); member_name = task.member.name if task.member else '未知'; task_list_text += f"• T-{task.id}: @{member_name} - {task.content[:20]}... ({pattern_text}) - 已生成 {task.recurrence_count} 次\n  操作: #詳情 T-{task.id} | #取消定期 T-{task.id}\n\n"
             # Split long messages...
-            max_len = 4900
-            messages_to_send = []
-            while len(task_list_text) > max_len:
-                split_pos = task_list_text.rfind('\n\n', 0, max_len)
-                if split_pos == -1:
-                    split_pos = max_len
-                messages_to_send.append(TextSendMessage(text=task_list_text[:split_pos]))
-                task_list_text = task_list_text[split_pos:].lstrip()
-            messages_to_send.append(TextSendMessage(text=task_list_text))
-            line_bot_api.reply_message(reply_token, messages=messages_to_send)
+        max_len = 4900; messages_to_send = [];
+        while len(task_list_text) > max_len: split_pos = task_list_text.rfind('\n\n', 0, max_len); if split_pos == -1: split_pos = max_len; messages_to_send.append(TextSendMessage(text=task_list_text[:split_pos])); task_list_text = task_list_text[split_pos:].lstrip()
+        messages_to_send.append(TextSendMessage(text=task_list_text)); line_bot_api.reply_message(reply_token, messages=messages_to_send)
     except SQLAlchemyError as e: logger.exception(f"列出定期任務DB失敗: {e}"); line_bot_api.reply_message(reply_token, TextSendMessage(text="查詢定期任務列表DB錯誤。"))
     except Exception as e: logger.exception(f"列出定期任務未知錯誤: {e}"); line_bot_api.reply_message(reply_token, TextSendMessage(text="處理定期列表請求內部錯誤。"))
 
@@ -622,7 +602,7 @@ def format_recurrence_pattern(system_pattern: Optional[str]) -> str: # Same
     elif system_pattern.startswith("weekly_"): day_en = system_pattern.split("_")[1]; return f"每{day_map_reverse.get(day_en, day_en)}"
     elif system_pattern.startswith("monthly_"): day = system_pattern.split("_")[1]; return f"每月{day}日"
     elif system_pattern.startswith("yearly_"): parts = system_pattern.split("_");
-        if len(parts) >= 3: month, day = parts[1], parts[2]; return f"每年{month}月{day}日"
+    if len(parts) >= 3: month, day = parts[1], parts[2]; return f"每年{month}月{day}日"
     return system_pattern
 
 # --- Help Messages ---
@@ -726,7 +706,7 @@ def create_task_list_text(title: str, tasks: List[Task], db: Session): # Existin
             result += f"👉 操作: #完成 T-{task.id} | #詳情 T-{task.id}\n"
             if i < len(tasks): result += "\n" + ("-" * 20) + "\n\n"
         except Exception as e: logger.error(f"生成任務 T-{task.id} 文字描述失敗: {e}"); result += f"【任務 T-{task.id}】\n❌ 無法顯示此任務詳情 ({type(e).__name__})\n\n";
-            if i < len(tasks): result += "\n" + ("-" * 20) + "\n\n"
+        if i < len(tasks): result += "\n" + ("-" * 20) + "\n\n"
     return result
 def create_batch_add_result_bubble(member_name: str, success_summaries: List[str], failed_lines_info: List[Dict[str, str]]): # Existing revised
     success_count = len(success_summaries); failure_count = len(failed_lines_info); header_text = f"批量新增結果 (@{member_name})"
@@ -793,14 +773,14 @@ def api_generate_recurring_tasks():
                     if new_tasks_today:
                         notif_text += "✨ **今日新增定期任務：**\n"; count = 0
                         for item in new_tasks_today: task_obj = item['obj'];
-                            if task_obj.id: notif_text += f"• T-{task_obj.id} {item['info']}\n"; count += 1
-                            else: notif_text += f"• (新) {item['info']}\n"; count += 1
-                            if count >= MAX_TASKS_PER_SECTION: notif_text += f"... (等共計 {len(new_tasks_today)} 個新任務)\n"; break
+                        if task_obj.id: notif_text += f"• T-{task_obj.id} {item['info']}\n"; count += 1
+                        else: notif_text += f"• (新) {item['info']}\n"; count += 1
+                        if count >= MAX_TASKS_PER_SECTION: notif_text += f"... (等共計 {len(new_tasks_today)} 個新任務)\n"; break
                         if count == 0: notif_text += "_無_\n"; notif_text += "\n"
                     if other_pending:
                         notif_text += "⏳ **其他待辦任務：**\n"; count = 0
                         for item in other_pending: notif_text += f"• T-{item['id']} {item['info']}\n"; count += 1
-                            if count >= MAX_TASKS_PER_SECTION: notif_text += f"... (等共計 {len(other_pending)} 個其他任務)\n"; break
+                        if count >= MAX_TASKS_PER_SECTION: notif_text += f"... (等共計 {len(other_pending)} 個其他任務)\n"; break
                         if count == 0: notif_text += "_無_\n"; notif_text += "\n"
                     if not new_tasks_today and not other_pending: continue
                     notif_text += f"👉 使用 `#列表` 查看完整待辦清單。"
