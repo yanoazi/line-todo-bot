@@ -1,8 +1,7 @@
-run = "python app.py"
+run = "python3 app.py"
 language = "python3"
 entrypoint = "app.py"
 hidden = [".config", "**/__pycache__", "**/.mypy_cache", "**/*.pyc"]
-modules = ["python-3.11"]
 
 [nix]
 channel = "stable-22_11"
@@ -11,7 +10,7 @@ packages = ["cacert"]
 [env]
 PYTHONPATH = "$PYTHONPATH:${REPL_HOME}"
 PATH = "${REPL_HOME}/venv/bin:${PATH}"
-PORT = "8080"
+PORT = "8888"
 
 [packager]
 language = "python3"
@@ -27,43 +26,3 @@ syntax = "python"
 
 [languages.python3.languageServer]
 start = ["pylsp"] 
-
-[workflows]
-runButton = "Run"
-
-[[workflows.workflow]]
-name = "Run"
-author = 41504860
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python3 app.py"
-
-[[ports]]
-localPort = 3000
-externalPort = 3000
-
-[[ports]]
-localPort = 5000
-externalPort = 5000
-
-[[ports]]
-localPort = 5001
-externalPort = 3001
-
-[[ports]]
-localPort = 5002
-externalPort = 3002
-
-[[ports]]
-localPort = 7000
-externalPort = 3003
-
-[[ports]]
-localPort = 8000
-externalPort = 8000
-
-[[ports]]
-localPort = 8080
-externalPort = 80
