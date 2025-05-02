@@ -284,15 +284,22 @@ def parse_recurrence_input(text: str) -> (Optional[str], Optional[str]):
     pattern_map_week = { "週一": "weekly_monday", "週二": "weekly_tuesday", "週三": "weekly_wednesday", "週四": "weekly_thursday", "週五": "weekly_friday", "週六": "weekly_saturday", "週日": "weekly_sunday" }
     if text == "每天": system_pattern = "daily"; user_friendly_pattern = "每天"
     elif text.startswith("每週") and text[2:] in pattern_map_week: day_zh = text[2:]; system_pattern = pattern_map_week[day_zh]; user_friendly_pattern = f"每週{day_zh}"
-    elif text.startswith("每月") and text.endswith("日"): day_str = text[2:-1];
-        if day_str.isdigit() and 1 <= int(day_str) <= 31: day_num = int(day_str); system_pattern = f"monthly_{day_num}"; user_friendly_pattern = f"每月{day_num}日"
+    elif text.startswith("每月") and text.endswith("日"):
+        day_str = text[2:-1]
+        if day_str.isdigit() and 1 <= int(day_str) <= 31:
+            day_num = int(day_str)
+            system_pattern = f"monthly_{day_num}"
+            user_friendly_pattern = f"每月{day_num}日"
     elif text.startswith("每年") and "月" in text and text.endswith("日"):
         try:
             match = re.match(r"每年(\d{1,2})月(\d{1,2})日", text)
-            if match: month, day = int(match.group(1)), int(match.group(2));
-                if 1 <= month <= 12 and 1 <= day <= 31: system_pattern = f"yearly_{month}_{day}"; user_friendly_pattern = f"每年{month}月{day}日"
+            if match:
+                month, day = int(match.group(1)), int(match.group(2))
+                if 1 <= month <= 12 and 1 <= day <= 31:
+                    system_pattern = f"yearly_{month}_{day}"
+                    user_friendly_pattern = f"每年{month}月{day}日"
         except (ValueError, IndexError):
-             pass
+            pass
     logger.debug(f"Parsed recurrence input '{text}' to system='{system_pattern}', user='{user_friendly_pattern}'")
     return system_pattern, user_friendly_pattern
 
