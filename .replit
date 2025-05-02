@@ -49,5 +49,5 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "gce"
-run = ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:7777"]
+run = ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:7777 --workers 4"]
 

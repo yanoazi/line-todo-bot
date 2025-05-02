@@ -341,10 +341,16 @@ def parse_recurrence_input(text: str) -> (Optional[str], Optional[str]):
     elif text.startswith("每年") and "月" in text and text.endswith("日"):
         try:
             match = re.match(r"每年(\d{1,2})月(\d{1,2})日", text)
-            if match: month, day = int(match.group(1)), int(match.group(2));
-                if 1 <= month <= 12 and 1 <= day <= 31: system_pattern = f"yearly_{month}_{day}"; user_friendly_pattern = f"每年{month}月{day}日"
-        except (ValueError, IndexError): pass
-    logger.debug(f"Parsed recurrence input '{text}' to system='{system_pattern}', user='{user_friendly_pattern}'"); return system_pattern, user_friendly_pattern
+            if match:
+                month, day = int(match.group(1)), int(match.group(2))
+                if 1 <= month <= 12 and 1 <= day <= 31:
+                    system_pattern = f"yearly_{month}_{day}"
+                    user_friendly_pattern = f"每年{month}月{day}日"
+        except (ValueError, IndexError):
+            pass
+    logger.debug(f"Parsed recurrence input '{text}' to system='{system_pattern}', user='{user_friendly_pattern}'")
+    return system_pattern, user_friendly_pattern
+
 def create_conversation_task(reply_token: str, user_session: Dict[str, Any], group_id: str, db: Session, due_date: Optional[datetime]):
     member_name = user_session.get('member_name'); task_content = user_session.get('content'); priority = user_session.get('priority', 'normal')
     if not member_name or not task_content: logger.error(f"會話狀態不完整，無法創建任務: {user_session}"); line_bot_api.reply_message(reply_token, TextSendMessage(text="抱歉，任務資訊不完整...")); return
