@@ -1388,8 +1388,8 @@ if __name__ == "__main__":
 
     # 特別處理 Replit 環境
     if IN_REPLIT:
-        # Replit 中使用 5000 端口
-        port = 5000
+        # Replit 中使用 8080 端口
+        port = 8080
         logger.info(f"在 Replit 環境中運行，使用端口 {port}")
 
         # 導入 Replit 特有的模塊
