@@ -1,11 +1,12 @@
+
 run = "python3 app.py"
 language = "python3"
 entrypoint = "app.py"
 hidden = [".config", "**/__pycache__", "**/.mypy_cache", "**/*.pyc"]
 
 [nix]
-channel = "stable-22_11"
-packages = ["cacert"]
+channel = "stable-23_11"
+packages = ["python3", "cacert"]
 
 [env]
 PYTHONPATH = "$PYTHONPATH:${REPL_HOME}"
@@ -25,4 +26,4 @@ pattern = "**/*.py"
 syntax = "python"
 
 [languages.python3.languageServer]
-start = ["pylsp"] 
+start = ["pylsp"]
