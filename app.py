@@ -412,11 +412,11 @@ def handle_list_tasks(reply_token: str, match: re.Match, group_id: str, db: Sess
         try: bubble_json = create_task_list_bubble(title, tasks, db); line_bot_api.reply_message(reply_token, messages=[FlexSendMessage(alt_text=title, contents=bubble_json)])
         except Exception as e: logger.exception(f"創建/發送 Flex 列表失敗: {e}"); task_list_text = create_task_list_text(title, tasks, db)
             # Split long messages...
-            max_len = 4900
-            messages_to_send = []
-            while len(task_list_text) > max_len:
-                split_pos = task_list_text.rfind('\n\n', 0, max_len)
-                if split_pos == -1:
+        max_len = 4900
+        messages_to_send = []
+        while len(task_list_text) > max_len:
+            split_pos = task_list_text.rfind('\n\n', 0, max_len)
+            if split_pos == -1:
                     split_pos = max_len
                 messages_to_send.append(TextSendMessage(text=task_list_text[:split_pos]))
                 task_list_text = task_list_text[split_pos:].lstrip()
