@@ -1384,15 +1384,16 @@ def api_generate_recurring_tasks():
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 5000))
+    # 這個值會來自 .replit 文件中的 [env] -> PORT 設定
+    port = int(os.environ.get('PORT', 7777))
+    logger.info(f"讀取到的端口配置為: {port}") # Log the port being used
 
-    # 特別處理 Replit 環境
+    # 特別處理 Replit 環境 (主要為了 keep_alive)
     if IN_REPLIT:
-        # Replit 中使用 8080 端口
-        port = 8080
-        logger.info(f"在 Replit 環境中運行，使用端口 {port}")
+        logger.info(f"在 Replit 環境中運行，將使用端口 {port}") # 日誌顯示實際使用的端口
+        # port = 8080  # <--- 移除或註解掉這一行 (重要！)
 
-        # 導入 Replit 特有的模塊
+        # --- keep_alive 部分保持不變，它會使用上面讀取到的 port 變數 ---
         try:
             from threading import Thread
             import socket
@@ -1400,21 +1401,40 @@ if __name__ == "__main__":
             def keep_alive():
                 """保持 Replit 程序不休眠的函數"""
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.bind(('0.0.0.0', port))
-                sock.listen(5)
+                try:
+                    # keep_alive 也將使用從環境變數讀取的 port
+                    sock.bind(('0.0.0.0', port))
+                    sock.listen(5)
+                    logger.info(f"Keep-alive 服務也嘗試在端口 {port} 上監聽。")
+                except OSError as e:
+                    logger.warning(f"Keep-alive 無法綁定到端口 {port}: {e}。Flask 應已綁定。")
+                    return # Keep-alive 無法綁定則退出線程
 
                 while True:
-                    client, addr = sock.accept()
-                    client.close()
+                    try:
+                        client, addr = sock.accept()
+                        client.close()
+                    except Exception as accept_err:
+                        logger.error(f"Keep-alive accept error: {accept_err}")
+                        break # Exit loop on error
 
-            # 啟動保持活躍的線程
             Thread(target=keep_alive, daemon=True).start()
         except ImportError:
             logger.warning("無法導入 threading 或 socket 模塊，可能導致 Replit 休眠。")
+        except Exception as thread_err:
+             logger.error(f"啟動 keep_alive 線程時出錯: {thread_err}")
 
     # 啟動 Flask 應用
     logger.info(f"Flask 應用啟動於端口 {port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    try:
+        # app.run 將使用從 .replit 或預設值讀取的 port
+        app.run(host='0.0.0.0', port=port, debug=False)
+    except OSError as e:
+        logger.error(f"無法在端口 {port} 上啟動 Flask: {e}")
+        # 更新錯誤提示，現在應檢查 .replit 文件
+        logger.error("請檢查該端口是否已被其他程序佔用，或嘗試修改 '.replit' 文件中的 PORT 環境變數。")
+    except Exception as e:
+        logger.exception(f"啟動 Flask 應用時發生未預期錯誤: {e}")
 
 def send_add_task_form(reply_token: str, db: Session, group_id: str):
     """發送任務新增表單"""

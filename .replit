@@ -14,7 +14,7 @@ packages = ["cacert"]
 PYTHONPATH = "$PYTHONPATH:${REPL_HOME}"
 PATH = "${REPL_HOME}/venv/bin:${PATH}"
 # --- 修改這裡設定你想要的端口 ---
-PORT = "5000"  # 例如，設定為 5000
+PORT = "7777"  # 例如，設定為 5000
 
 [packager]
 language = "python3"
@@ -42,3 +42,8 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python app.py"
+
+[[ports]]
+localPort = 7777
+externalPort = 80
+
