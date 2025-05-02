@@ -5,6 +5,7 @@ hidden = [".config", "**/__pycache__", "**/.mypy_cache", "**/*.pyc"]
 
 [nix]
 channel = "stable-22_11"
+packages = ["cacert"]
 
 [env]
 PYTHONPATH = "$PYTHONPATH:${REPL_HOME}"
