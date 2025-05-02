@@ -1,3 +1,4 @@
+# .replit
 
 run = "python3 app.py"
 language = "python3"
@@ -6,13 +7,14 @@ hidden = [".config", "**/__pycache__", "**/.mypy_cache", "**/*.pyc"]
 modules = ["python-3.11"]
 
 [nix]
-channel = "stable-23_11"
-packages = ["cacert", "python3"]
+channel = "stable-22_11"
+packages = ["cacert"]
 
 [env]
 PYTHONPATH = "$PYTHONPATH:${REPL_HOME}"
 PATH = "${REPL_HOME}/venv/bin:${PATH}"
-PORT = "8888"
+# --- 修改這裡設定你想要的端口 ---
+PORT = "5000"  # 例如，設定為 5000
 
 [packager]
 language = "python3"
@@ -29,10 +31,14 @@ syntax = "python"
 [languages.python3.languageServer]
 start = ["pylsp"]
 
-[[ports]]
-localPort = 5000
-externalPort = 5000
+[workflows]
+runButton = "Run"
 
-[[ports]]
-localPort = 8888
-externalPort = 80
+[[workflows.workflow]]
+name = "Run"
+author = 41504860
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python app.py"
