@@ -3,10 +3,11 @@ run = "python3 app.py"
 language = "python3"
 entrypoint = "app.py"
 hidden = [".config", "**/__pycache__", "**/.mypy_cache", "**/*.pyc"]
+modules = ["python-3.11"]
 
 [nix]
 channel = "stable-23_11"
-packages = ["python3", "cacert"]
+packages = ["cacert", "python3"]
 
 [env]
 PYTHONPATH = "$PYTHONPATH:${REPL_HOME}"
@@ -27,3 +28,7 @@ syntax = "python"
 
 [languages.python3.languageServer]
 start = ["pylsp"]
+
+[[ports]]
+localPort = 8888
+externalPort = 80
