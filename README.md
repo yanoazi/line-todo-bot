@@ -1,86 +1,80 @@
-# LINE 待辦事項機器人 (LINE To-Do Bot)
+# LINE待辦事項機器人 (Todo Bot)
 
-一個運行在 LINE 群組中，協助成員管理待辦事項、進行簡單抽籤和擲筊的 Python 機器人。整合 n8n 可進行自動提醒，並計畫整合 OpenAI 進行自然語言處理。
+這是一個用於LINE群組的待辦事項管理機器人，支持任務的新增、修改、刪除、完成等功能，以及定期任務、優先級管理等進階功能。
 
-## ✨ 功能特色
+## 主要功能
 
-* **待辦事項管理 (使用 `#` 指令)：**
-    * `#新增 @成員 內容 [YYYY/MM/DD]`: 新增任務給指定成員 (日期可選)。
-    * `#完成 T-ID`: 將指定 ID 的任務標記為完成。
-    * `#列表 [@成員]`: 列出群組全部或指定成員的待辦任務。
-    * `#修改 T-ID 新內容 [YYYY/MM/DD]`: 修改任務內容或日期。
-    * `#刪除 T-ID`: 刪除指定任務。
-    * `#詳情 T-ID`: 查看任務詳細資訊。
-* **小工具：**
-    * `#擲筊 問題`: 進行擲筊。
-    * `#抽籤 選項1 選項2 ...`: 從選項中隨機抽取。
-* **自動提醒 (需搭配 n8n)：**
-    * 透過 n8n Workflow 定時發送待辦事項提醒。
-    * (可選) 整合 OpenAI 產生更智慧的提醒文字。
-* **幫助指令：**
-    * `#幫助`: 顯示所有可用指令。
-* **(計畫中) 自然語言處理：**
-    * 未來計畫整合 OpenAI，允許使用自然語言新增任務。
+- 🔸 任務管理:
+  - 新增單一任務，支持優先級和截止日期
+  - 批量新增多個任務
+  - 新增定期重複任務（每週、每月、每年）
+  - 查看任務詳情
+  - 修改任務內容、優先級和截止日期
+  - 完成任務
+  - 刪除任務
+  - 取消定期任務
+  - 查看任務列表（全部或指定成員）
 
-## 🚀 技術棧
+- 🔸 其他功能:
+  - 擲筊功能（提供問題，得到聖筊/陰筊/笑筊結果）
+  - 隨機抽籤功能（從多個選項中隨機選擇）
 
-* **後端：** Python, Flask
-* **資料庫：** PostgreSQL (使用 SQLAlchemy ORM)
-* **LINE Bot SDK：** line-bot-sdk-python (v2.x)
-* **部署平台：** Render (Web Service + PostgreSQL Free Tier)
-* **自動化：** n8n (用於排程提醒)
-* **(可選) AI：** OpenAI API
+## 如何使用
 
-## ⚙️ 設定與安裝 (供參考)
+### 基本指令
 
-1.  **Clone Repository:**
-    ```bash
-    git clone [https://github.com/yanoazi/line-todo-bot.git](https://github.com/yanoazi/line-todo-bot.git)
-    cd line-todo-bot
-    ```
-2.  **建立虛擬環境:**
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # Linux/macOS
-    # venv\Scripts\activate  # Windows
-    ```
-3.  **安裝依賴:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-4.  **設定環境變數:**
-    * 建立一個 `.env` 檔案在專案根目錄。
-    * 填入以下必要的環境變數
-        ```dotenv
-        LINE_CHANNEL_ACCESS_TOKEN=xxx
-        LINE_CHANNEL_SECRET=xxx
-        DATABASE_URL=postgres://user:password@host:port/dbname  # PostgreSQL 連線 URL
-        TARGET_GROUP_ID=Cxxxxxxxxxxxxxx # n8n 預設提醒的群組 ID
-        API_KEY=YourSecretKeyForN8nAccess # 給 n8n 呼叫 API 用的 Key
-        # OPENAI_API_KEY=sk-xxxxxxxxxxxx # 如果未來使用 OpenAI
-        ```
-5.  **初始化資料庫:** (首次執行或資料庫表格不存在時)
-    * 程式啟動時 (`app.py` 中的 `init_db()`) 會嘗試自動建立表格。
-6.  **執行應用程式 (本地測試):**
-    ```bash
-    python app.py
-    ```
-    * (需要搭配 ngrok 等工具接收 LINE Webhook)
+```text
+🔸 任務管理:
+   #新增 @成員 [!優先級] 內容 [YYYY/MM/DD]
+     (優先級可為 !低、!普通、!高)
+     (截止日可選)
+   #批量新增 @成員
+     [!優先級] 任務1 [YYYY/MM/DD]
+     [!優先級] 任務2 [YYYY/MM/DD]
+     (每行一個任務，優先級、日期可選)
+   #定期 @成員 [!優先級] 內容 每週一
+     (週一至週日、月DD日、年MM月DD日)
+   #取消定期 T-ID
+   #完成 T-ID
+   #列表 [@成員]
+     (成員可選，預設列全部)
+   #修改 T-ID [!優先級] 新內容 [YYYY/MM/DD]
+     (優先級、截止日可選)
+   #刪除 T-ID
+   #詳情 T-ID
 
-## 部署到 Render
+🔸 其他功能:
+   #擲筊 問題
+   #抽籤 選項1 選項2 ...
+   #幫助 (顯示本說明)
+```
 
-本專案已設定為可直接部署到 Render：
-1.  在 Render 建立一個 PostgreSQL (Free) 服務。
-2.  在 Render 建立一個 Web Service，連接到此 GitHub Repository。
-3.  設定 Build Command: `pip install -r requirements.txt`
-4.  設定 Start Command: `gunicorn app:app`
-5.  在 Render Web Service 的 Environment Variables 中設定上面提到的所有環境變數 (使用 Internal Database URL)。
-6.  將 Render 提供的 Web Service URL (`https://your-app-name.onrender.com`) 加上 `/callback` 設定到 LINE Developer Console 的 Webhook URL。
+## 如何部署在Replit上
 
-## 📝 使用方法
+1. 在Replit中創建一個新的Python專案
+2. 將本專案的所有文件上傳到Replit
+3. 在Replit的Secrets設置以下環境變量:
+   - `LINE_CHANNEL_ACCESS_TOKEN`: LINE機器人的Channel Access Token
+   - `LINE_CHANNEL_SECRET`: LINE機器人的Channel Secret
+   - `LINE_GROUP_ID`: 預設群組ID (可選)
+   - `API_KEY`: 用於API調用的金鑰
+   - `PGUSER`: PostgreSQL用戶名
+   - `PGPASSWORD`: PostgreSQL密碼
+   - `PGHOST`: PostgreSQL主機地址
+   - `PGDATABASE`: PostgreSQL數據庫名稱
+   - `PGPORT`: PostgreSQL端口 (預設5432)
 
-將 LINE Bot 加入您的群組後，即可透過輸入 `#` 開頭的指令與機器人互動。輸入 `#幫助` 查看完整指令列表。
+4. 點擊Run按鈕啟動應用
+5. 使用Replit提供的URL作為LINE Bot的Webhook URL (需要加上 `/callback` 路徑)
 
-## 📄 授權 (License)
+## 定期任務自動生成
 
-本專案採用 MIT 授權條款。詳情請參閱 [LICENSE](LICENSE) 檔案。
+定期任務需要設置一個外部觸發器來定期調用API:
+
+```http
+POST /api/generate-recurring-tasks
+Headers: 
+  X-API-KEY: your_api_key
+```
+
+可以使用Replit的Scheduled Jobs或其他定時任務服務來每天觸發此API。

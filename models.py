@@ -1,7 +1,7 @@
 # models.py (SQLAlchemy Version for PostgreSQL - with Type Hint Fixes)
 import os
 from sqlalchemy import (
-    create_engine, Column, Integer, String, Text, DateTime, ForeignKey, UniqueConstraint
+    create_engine, Column, Integer, String, Text, DateTime, ForeignKey, UniqueConstraint, Boolean
 )
 # --- Type Hint Fix 1: Import Session from sqlalchemy.orm and typing helpers ---
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base, Session
@@ -11,14 +11,41 @@ from sqlalchemy.sql import func
 from contextlib import contextmanager
 from datetime import datetime
 from dotenv import load_dotenv
+import logging
+
+# 設置日誌
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
+# 檢測是否在 Replit 環境中運行，若是則自動配置 PostgreSQL 連接
+IN_REPLIT = os.environ.get('REPL_ID') is not None
+if IN_REPLIT and not DATABASE_URL:
+    # 使用 Replit 的 Secrets 管理器存儲 PostgreSQL 憑據
+    PGUSER = os.environ.get('PGUSER')
+    PGPASSWORD = os.environ.get('PGPASSWORD')
+    PGHOST = os.environ.get('PGHOST')
+    PGDATABASE = os.environ.get('PGDATABASE')
+    PGPORT = os.environ.get('PGPORT', '5432')
+    
+    if PGUSER and PGPASSWORD and PGHOST and PGDATABASE:
+        DATABASE_URL = f"postgresql://{PGUSER}:{PGPASSWORD}@{PGHOST}:{PGPORT}/{PGDATABASE}"
+        os.environ['DATABASE_URL'] = DATABASE_URL  # 設置環境變數供其他模組使用
+        logger.info("已從 Replit Secrets 設置 PostgreSQL 連接。")
+    else:
+        logger.error("在 Replit 環境中，但未設置完整 PostgreSQL 連接信息。請在 Secrets 中配置 PGUSER, PGPASSWORD, PGHOST, PGDATABASE。")
+
 if not DATABASE_URL:
     raise ValueError("環境變數 DATABASE_URL 未設定！")
 
-engine = create_engine(DATABASE_URL)
+# 修復 PostgreSQL URL (Render 兼容)
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    logger.info("已將 postgres:// 修正為 postgresql:// 以兼容 SQLAlchemy")
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=3600)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, expire_on_commit=False)
 Base = declarative_base()
 
@@ -54,9 +81,15 @@ class Task(Base):
     due_date = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
+    priority = Column(String, default='normal', index=True)
+    is_recurring = Column(Boolean, default=False)
+    recurrence_pattern = Column(String, nullable=True)
+    recurrence_count = Column(Integer, default=0)
+    parent_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
     member = relationship("Member", back_populates="tasks")
+    child_tasks = relationship("Task", backref="parent_task", remote_side=[id])
     def __repr__(self):
-        return f"<Task(id={self.id}, content='{self.content[:20]}...', status='{self.status}')>"
+        return f"<Task(id={self.id}, content='{self.content[:20]}...', status='{self.status}', priority='{self.priority}')>"
 
 def init_db():
     print("初始化資料庫，嘗試建立表格...")
@@ -91,8 +124,8 @@ def create_member(db: Session, name: str, group_id: str, line_user_id: Optional[
     db.refresh(db_member)
     return db_member
 
-def create_task(db: Session, member_id: int, content: str, due_date: Optional[datetime] = None) -> Task:
-    db_task = Task(member_id=member_id, content=content, status='pending', due_date=due_date)
+def create_task(db: Session, member_id: int, content: str, due_date: Optional[datetime] = None, priority: str = "normal") -> Task:
+    db_task = Task(member_id=member_id, content=content, status='pending', due_date=due_date, priority=priority)
     db.add(db_task)
     db.commit()
     db.refresh(db_task)

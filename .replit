@@ -1,0 +1,27 @@
+run = "python app.py"
+language = "python3"
+entrypoint = "app.py"
+hidden = [".config", "**/__pycache__", "**/.mypy_cache", "**/*.pyc"]
+
+[nix]
+channel = "stable-22_11"
+
+[env]
+PYTHONPATH = "$PYTHONPATH:${REPL_HOME}"
+PATH = "${REPL_HOME}/venv/bin:${PATH}"
+PORT = "8080"
+
+[packager]
+language = "python3"
+ignoredPackages = ["unit_tests"]
+
+[packager.features]
+packageSearch = true
+guessImports = true
+
+[languages.python3]
+pattern = "**/*.py"
+syntax = "python"
+
+[languages.python3.languageServer]
+start = ["pylsp"] 
