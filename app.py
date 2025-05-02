@@ -1384,12 +1384,12 @@ def api_generate_recurring_tasks():
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 8888))
+    port = int(os.environ.get('PORT', 5000))
 
     # 特別處理 Replit 環境
     if IN_REPLIT:
-        # Replit 中默認使用 8888 端口
-        port = 8888
+        # Replit 中使用 5000 端口
+        port = 5000
         logger.info(f"在 Replit 環境中運行，使用端口 {port}")
 
         # 導入 Replit 特有的模塊
