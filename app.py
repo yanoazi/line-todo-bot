@@ -1388,41 +1388,9 @@ if __name__ == "__main__":
     port = int(os.environ.get('PORT', 7777))
     logger.info(f"讀取到的端口配置為: {port}") # Log the port being used
 
-    # 特別處理 Replit 環境 (主要為了 keep_alive)
+    # 特別處理 Replit 環境
     if IN_REPLIT:
-        logger.info(f"在 Replit 環境中運行，將使用端口 {port}") # 日誌顯示實際使用的端口
-        # port = 8080  # <--- 移除或註解掉這一行 (重要！)
-
-        # --- keep_alive 部分保持不變，它會使用上面讀取到的 port 變數 ---
-        try:
-            from threading import Thread
-            import socket
-
-            def keep_alive():
-                """保持 Replit 程序不休眠的函數"""
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                try:
-                    # keep_alive 也將使用從環境變數讀取的 port
-                    sock.bind(('0.0.0.0', port))
-                    sock.listen(5)
-                    logger.info(f"Keep-alive 服務也嘗試在端口 {port} 上監聽。")
-                except OSError as e:
-                    logger.warning(f"Keep-alive 無法綁定到端口 {port}: {e}。Flask 應已綁定。")
-                    return # Keep-alive 無法綁定則退出線程
-
-                while True:
-                    try:
-                        client, addr = sock.accept()
-                        client.close()
-                    except Exception as accept_err:
-                        logger.error(f"Keep-alive accept error: {accept_err}")
-                        break # Exit loop on error
-
-            Thread(target=keep_alive, daemon=True).start()
-        except ImportError:
-            logger.warning("無法導入 threading 或 socket 模塊，可能導致 Replit 休眠。")
-        except Exception as thread_err:
-             logger.error(f"啟動 keep_alive 線程時出錯: {thread_err}")
+        logger.info(f"在 Replit 環境中運行，將使用端口 {port}")
 
     # 啟動 Flask 應用
     logger.info(f"Flask 應用啟動於端口 {port}")
