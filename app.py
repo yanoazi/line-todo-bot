@@ -5,7 +5,7 @@ import json
 import random
 import re
 from typing import List, Optional
-from datetime import datetime, timezone # Import timezone
+from datetime import datetime, timezone, timedelta # Import timezone and timedelta
 import logging
 from dotenv import load_dotenv
 import inspect
@@ -93,13 +93,39 @@ RANDOM_PICK_PATTERN = r'#抽籤\s+(.+)$'
 # 新增批量任務模式
 BATCH_ADD_TASK_PATTERN = r'#批量新增\s+@(\S+)\s+(.+)$'
 # 定期任務相關模式
-RECURRING_TASK_PATTERN = r'#定期\s+@(\S+)\s+(?:(!(?:低|普通|高))\s+)?(.+?)\s+每(週[一二三四五六日]|月\d{1,2}日|年\d{1,2}月\d{1,2}日)$'
+RECURRING_TASK_PATTERN = r'#定期\s+@(\S+)\s+(?:(!(?:低|普通|高))\s+)?(.+?)\s+每(天|週[一二三四五六日]|月\d{1,2}日|年\d{1,2}月\d{1,2}日)$'
 CANCEL_RECURRING_PATTERN = r'#取消定期\s+T-(\d+)$'
 # 表單填寫相關模式
 PRE_ADD_PATTERN = r'#要新增\s+(?:@(\S+)|!(?:低|普通|高)|每(週[一二三四五六日]|月\d{1,2}日|年\d{1,2}月\d{1,2}日))?$'
 PRE_RECURRING_PATTERN = r'#要新增定期\s+(?:@(\S+)|!(?:低|普通|高)|每(週[一二三四五六日]|月\d{1,2}日|年\d{1,2}月\d{1,2}日))?$'
 
+# 新增添加任務的新流程模式
+# 這會匹配 "#任務 打掃教室" 這樣的格式
+TASK_SIMPLE_PATTERN = r'#任務\s+(.+)$'
 
+# --- 簡單的會話管理 ---
+# 由於我們不想添加數據庫表或使用第三方庫，這裡使用一個簡單的內存字典來存儲會話
+# 注意: 這只是一個簡單的實現，生產環境中應使用更健壯的解決方案
+SESSION_STORAGE = {}
+
+def get_session(user_id, group_id):
+    """獲取用戶的會話數據"""
+    session_key = f"{user_id}_{group_id}"
+    if session_key not in SESSION_STORAGE:
+        SESSION_STORAGE[session_key] = {}
+    return SESSION_STORAGE[session_key]
+
+def save_session(user_id, group_id, session_data):
+    """保存用戶的會話數據"""
+    session_key = f"{user_id}_{group_id}"
+    SESSION_STORAGE[session_key] = session_data
+
+def clear_session(user_id, group_id):
+    """清除用戶的會話數據"""
+    session_key = f"{user_id}_{group_id}"
+    if session_key in SESSION_STORAGE:
+        SESSION_STORAGE[session_key] = {}
+        
 # --- Flask Routes ---
 
 @app.route("/callback", methods=['POST'])
@@ -165,6 +191,174 @@ def handle_text_message(event):
     # --- Use Database Session Context Manager ---
     try:
         with get_db() as db: # Get SQLAlchemy session
+            # --- Get Session Data ---
+            session = get_session(user_id, group_id)
+
+            # 檢查是否在任務添加流程中
+            if session.get('awaiting_priority') == True:
+                # 用戶正在添加任務，等待優先級選擇
+                if text in ["低", "!低", "普通", "!普通", "高", "!高"]:
+                    # 解析優先級
+                    priority = "low" if "低" in text else "high" if "高" in text else "normal"
+                    session['priority'] = priority
+                    
+                    # 如果有截止日期，詢問截止日期
+                    session['awaiting_priority'] = False
+                    session['awaiting_due_date'] = True
+                    save_session(user_id, group_id, session)
+                    
+                    # 發送截止日期選擇提示
+                    due_date_prompt_text = f"請選擇任務截止日期 (如：2023/12/31)，或輸入'無'表示沒有截止日期"
+                    
+                    # 創建 Flex 消息提供日期選擇按鈕
+                    today = datetime.now()
+                    tomorrow = today + timedelta(days=1)
+                    next_week = today + timedelta(days=7)
+                    
+                    contents = {
+                        "type": "bubble",
+                        "header": {
+                            "type": "box", "layout": "vertical",
+                            "contents": [
+                                {"type": "text", "text": "選擇截止日期", "weight": "bold", "size": "lg"}
+                            ]
+                        },
+                        "body": {
+                            "type": "box", "layout": "vertical",
+                            "contents": [
+                                {"type": "text", "text": f"為「{session['content']}」設定截止日期", "wrap": True, "margin": "md", "size": "md"},
+                                {"type": "box", "layout": "horizontal", "margin": "md", "contents": [
+                                    {
+                                        "type": "button", "style": "primary", "height": "sm", "flex": 1,
+                                        "action": {"type": "message", "label": "今天", "text": today.strftime("%Y/%m/%d")}
+                                    },
+                                    {
+                                        "type": "button", "style": "primary", "height": "sm", "flex": 1, "margin": "md",
+                                        "action": {"type": "message", "label": "明天", "text": tomorrow.strftime("%Y/%m/%d")}
+                                    }
+                                ]},
+                                {"type": "box", "layout": "horizontal", "margin": "md", "contents": [
+                                    {
+                                        "type": "button", "style": "primary", "height": "sm", "flex": 1,
+                                        "action": {"type": "message", "label": "下週", "text": next_week.strftime("%Y/%m/%d")}
+                                    },
+                                    {
+                                        "type": "button", "style": "secondary", "height": "sm", "flex": 1, "margin": "md",
+                                        "action": {"type": "message", "label": "無截止日期", "text": "無"}
+                                    }
+                                ]}
+                            ]
+                        }
+                    }
+                    
+                    try:
+                        line_bot_api.reply_message(reply_token, FlexSendMessage(alt_text="選擇截止日期", contents=contents))
+                    except Exception as e:
+                        logger.exception(f"發送日期選擇 Flex 訊息失敗: {e}")
+                        line_bot_api.reply_message(reply_token, TextSendMessage(text=due_date_prompt_text))
+                    
+                    return
+                else:
+                    # 取消當前流程
+                    clear_session(user_id, group_id)
+                    line_bot_api.reply_message(reply_token, TextSendMessage(text="任務添加已取消。請重新輸入 #任務 內容 開始新的任務。"))
+                    return
+            
+            # 檢查是否在等待截止日期
+            elif session.get('awaiting_due_date') == True:
+                # 用戶正在添加任務，等待截止日期
+                due_date = None
+                if text.lower() != "無" and text != "無截止日期":
+                    # 嘗試解析日期
+                    due_date = parse_date(text)
+                    if due_date is None:
+                        line_bot_api.reply_message(reply_token, TextSendMessage(text="日期格式不正確，請使用 YYYY/MM/DD 格式，或輸入'無'表示沒有截止日期"))
+                        return
+                
+                # 獲取會話中已有的數據
+                member_id = session.get('member_id')
+                content = session.get('content')
+                priority = session.get('priority', 'normal')
+                
+                # 創建任務
+                try:
+                    task = create_task(db, member_id=member_id, content=content, due_date=due_date, priority=priority)
+                    
+                    # 獲取成員名稱
+                    member = get_member_by_id(db, member_id=member_id)
+                    member_name = member.name if member else "未知成員"
+                    
+                    # 清除會話
+                    clear_session(user_id, group_id)
+                    
+                    # 根據優先級添加表情符號
+                    priority_emoji = "🟢" if priority == "low" else "🟡" if priority == "normal" else "🔴"
+                    priority_text = "低" if priority == "low" else "普通" if priority == "normal" else "高"
+                    
+                    # 創建 Flex 消息來顯示任務創建結果
+                    try:
+                        contents = {
+                            "type": "bubble",
+                            "header": {
+                                "type": "box", "layout": "vertical",
+                                "contents": [
+                                    {"type": "text", "text": "任務已新增", "weight": "bold", "size": "xl", "color": "#27ACB2"}
+                                ]
+                            },
+                            "body": {
+                                "type": "box", "layout": "vertical",
+                                "contents": [
+                                    {"type": "text", "text": f"已為 {member_name} 新增任務", "weight": "bold", "wrap": True},
+                                    {"type": "box", "layout": "horizontal", "margin": "md", "contents": [
+                                        {"type": "text", "text": "任務ID:", "size": "sm", "color": "#888888", "flex": 2},
+                                        {"type": "text", "text": f"T-{task.id}", "size": "sm", "color": "#111111", "flex": 4, "weight": "bold"}
+                                    ]},
+                                    {"type": "box", "layout": "horizontal", "margin": "sm", "contents": [
+                                        {"type": "text", "text": "內容:", "size": "sm", "color": "#888888", "flex": 2},
+                                        {"type": "text", "text": task.content, "size": "sm", "color": "#111111", "flex": 4, "wrap": True}
+                                    ]},
+                                    {"type": "box", "layout": "horizontal", "margin": "sm", "contents": [
+                                        {"type": "text", "text": "優先級:", "size": "sm", "color": "#888888", "flex": 2},
+                                        {"type": "text", "text": f"{priority_emoji} {priority_text}", "size": "sm", "color": "#111111", "flex": 4}
+                                    ]}
+                                ]
+                            },
+                            "footer": {
+                                "type": "box", "layout": "vertical", "spacing": "sm",
+                                "contents": [
+                                    {
+                                        "type": "button", "style": "primary", "color": "#1DB446",
+                                        "action": {"type": "message", "label": "查看任務列表", "text": f"#列表 @{member_name}"}
+                                    }
+                                ]
+                            }
+                        }
+                        
+                        # 添加截止日期 (如果存在)
+                        if due_date:
+                            due_date_str = due_date.strftime("%Y/%m/%d")
+                            contents["body"]["contents"].append({
+                                "type": "box", "layout": "horizontal", "margin": "sm", "contents": [
+                                    {"type": "text", "text": "截止日期:", "size": "sm", "color": "#888888", "flex": 2},
+                                    {"type": "text", "text": due_date_str, "size": "sm", "color": "#111111", "flex": 4}
+                                ]
+                            })
+                        
+                        line_bot_api.reply_message(reply_token, FlexSendMessage(alt_text="任務已新增", contents=contents))
+                    except Exception as e:
+                        logger.exception(f"發送任務創建結果 Flex 訊息失敗: {e}")
+                        # 如果 Flex 訊息失敗，使用純文字訊息
+                        reply_text = f"✅ 已為 {member_name} 新增任務：\n內容：{task.content}\n任務ID：T-{task.id}\n"
+                        reply_text += f"優先級：{priority_emoji} {priority_text}\n"
+                        if due_date:
+                            reply_text += f"截止日期：{due_date.strftime('%Y/%m/%d')}"
+                        line_bot_api.reply_message(reply_token, TextSendMessage(text=reply_text))
+                except Exception as e:
+                    logger.exception(f"創建任務時發生錯誤: {e}")
+                    db.rollback()
+                    line_bot_api.reply_message(reply_token, TextSendMessage(text="新增任務失敗，請稍後再試。"))
+                return
+
             # --- Match Commands ---
             add_match = re.match(ADD_TASK_PATTERN, text)
             complete_match = re.match(COMPLETE_TASK_PATTERN, text)
@@ -179,8 +373,11 @@ def handle_text_message(event):
             cancel_recurring_match = re.match(CANCEL_RECURRING_PATTERN, text)
             pre_add_match = re.match(PRE_ADD_PATTERN, text)
             pre_recurring_match = re.match(PRE_RECURRING_PATTERN, text)
+            task_simple_match = re.match(TASK_SIMPLE_PATTERN, text)  # 簡單任務命令匹配
 
-            if add_match:
+            if task_simple_match:
+                handle_simple_task(reply_token, task_simple_match, group_id, user_id, db)
+            elif add_match:
                 handle_add_task(reply_token, add_match, group_id, user_id, db)
             elif complete_match:
                 handle_complete_task(reply_token, complete_match, user_id, db) # Pass user_id for potential permission checks
@@ -645,6 +842,8 @@ def send_help_message(reply_token: str):
     help_text = (
         "📋 代辦事項機器人指令 📋\n\n"
         "🔸 任務管理:\n"
+        "   #任務 內容\n"
+        "     (快速新增任務，會引導選擇成員和優先級)\n"
         "   #新增 @成員 [!優先級] 內容 [YYYY/MM/DD]\n"
         "     (優先級可為 !低、!普通、!高)\n"
         "     (截止日可選)\n"
@@ -653,7 +852,7 @@ def send_help_message(reply_token: str):
         "     [!優先級] 任務2 [YYYY/MM/DD]\n"
         "     (每行一個任務，優先級、日期可選)\n"
         "   #定期 @成員 [!優先級] 內容 每週一\n"
-        "     (週一至週日、月DD日、年MM月DD日)\n"
+        "     (每天、每週一至週日、每月DD日、每年MM月DD日)\n"
         "   #取消定期 T-ID\n"
         "   #完成 T-ID\n"
         "   #列表 [@成員]\n"
@@ -665,6 +864,8 @@ def send_help_message(reply_token: str):
         "🔸 其他功能:\n"
         "   #擲筊 問題\n"
         "   #抽籤 選項1 選項2 ...\n"
+        "   #新增 (顯示新增表單)\n"
+        "   #新增定期 (顯示定期任務表單)\n"
         "   #幫助 (顯示本說明)"
     )
     line_bot_api.reply_message(reply_token, TextSendMessage(text=help_text))
@@ -885,7 +1086,15 @@ def handle_batch_add_tasks(reply_token: str, match: re.Match, group_id: str, add
     task_lines = [line.strip() for line in tasks_text.split('\n') if line.strip()]
 
     if not task_lines:
-        line_bot_api.reply_message(reply_token, TextSendMessage(text="未提供任何任務內容。格式應為：\n#批量新增 @成員\n[!優先級] 任務1 [日期]\n[!優先級] 任務2 [日期]\n..."))
+        instruction_text = (
+            "批量新增格式說明：\n"
+            "#批量新增 @成員\n"
+            "任務1\n"
+            "!高 任務2 2023/12/31\n"
+            "!低 任務3\n"
+            "\n每行一個任務，可選擇性設定優先級和截止日期"
+        )
+        line_bot_api.reply_message(reply_token, TextSendMessage(text=instruction_text))
         return
 
     member = get_member_by_name_and_group(db, name=member_name, group_id=group_id)
@@ -940,16 +1149,62 @@ def handle_batch_add_tasks(reply_token: str, match: re.Match, group_id: str, add
 
     if success_count > 0:
         db.commit()  # 提交所有成功的任務
-        summary_text = f"✅ 已為 {member.name} 新增 {success_count} 個任務：\n" + "\n".join(task_summaries)
-
-        # 如果摘要太長，截斷它
-        if len(summary_text) > 2000:  # LINE 訊息長度限制
-            summary_text = summary_text[:1950] + "...\n(顯示部分任務，共新增 " + str(success_count) + " 個)"
-
-        line_bot_api.reply_message(reply_token, TextSendMessage(text=summary_text))
+        
+        # 創建 Flex 消息更直觀地展示結果
+        try:
+            contents = {
+                "type": "bubble",
+                "header": {
+                    "type": "box", "layout": "vertical",
+                    "contents": [
+                        {"type": "text", "text": f"已成功新增 {success_count} 個任務", "weight": "bold", "size": "xl", "color": "#27ACB2"}
+                    ]
+                },
+                "body": {
+                    "type": "box", "layout": "vertical",
+                    "contents": [
+                        {"type": "text", "text": f"為 {member.name} 新增了以下任務：", "size": "md", "wrap": True, "margin": "md"}
+                    ]
+                }
+            }
+            
+            # 為每個任務添加一個項目
+            for summary in task_summaries:
+                contents["body"]["contents"].append({
+                    "type": "text", "text": summary, "size": "sm", "wrap": True, "margin": "md"
+                })
+                
+            # 添加按鈕區
+            contents["footer"] = {
+                "type": "box", "layout": "vertical", "spacing": "sm",
+                "contents": [
+                    {
+                        "type": "button", "style": "primary", "color": "#1DB446",
+                        "action": {"type": "message", "label": "查看任務列表", "text": f"#列表 @{member.name}"}
+                    }
+                ]
+            }
+            
+            line_bot_api.reply_message(reply_token, FlexSendMessage(alt_text=f"已新增 {success_count} 個任務", contents=contents))
+        except Exception as e:
+            logger.exception(f"發送批量新增結果 Flex 訊息失敗: {e}")
+            # 如果 Flex 訊息失敗，使用純文字訊息
+            summary_text = f"✅ 已為 {member.name} 新增 {success_count} 個任務：\n" + "\n".join(task_summaries)
+            if len(summary_text) > 2000:  # LINE 訊息長度限制
+                summary_text = summary_text[:1950] + "...\n(顯示部分任務，共新增 " + str(success_count) + " 個)"
+            line_bot_api.reply_message(reply_token, TextSendMessage(text=summary_text))
     else:
         db.rollback()  # 如果沒有成功，回滾事務
-        line_bot_api.reply_message(reply_token, TextSendMessage(text="❌ 批量新增任務失敗，請檢查任務格式。"))
+        instruction_text = (
+            "❌ 批量新增任務失敗，請檢查任務格式。\n\n"
+            "正確格式：\n"
+            "#批量新增 @成員\n"
+            "任務1\n"
+            "!高 任務2 2023/12/31\n"
+            "!低 任務3\n"
+            "\n每行一個任務，可選擇性設定優先級和截止日期"
+        )
+        line_bot_api.reply_message(reply_token, TextSendMessage(text=instruction_text))
 
 def handle_recurring_task(reply_token: str, match: re.Match, group_id: str, adder_user_id: str, db: Session):
     """處理新增定期任務"""
@@ -968,6 +1223,7 @@ def handle_recurring_task(reply_token: str, match: re.Match, group_id: str, adde
 
     # 解析重複模式文字為系統格式
     pattern_map = {
+        "天": "daily",
         "週一": "weekly_monday",
         "週二": "weekly_tuesday",
         "週三": "weekly_wednesday",
@@ -992,7 +1248,14 @@ def handle_recurring_task(reply_token: str, match: re.Match, group_id: str, adde
                 system_pattern = f"yearly_{month}_{day}"
 
     if not system_pattern:
-        line_bot_api.reply_message(reply_token, TextSendMessage(text="無法識別的重複模式。請使用「每週一」、「每月1日」或「每年1月1日」等格式。"))
+        instruction_text = (
+            "無法識別的重複模式。請使用以下格式：\n"
+            "每天 - 每天重複\n"
+            "每週一 到 每週日 - 每週特定日重複\n"
+            "每月1日 到 每月31日 - 每月特定日重複\n"
+            "每年1月1日 - 每年特定日重複"
+        )
+        line_bot_api.reply_message(reply_token, TextSendMessage(text=instruction_text))
         return
 
     member = get_member_by_name_and_group(db, name=member_name, group_id=group_id)
@@ -1024,17 +1287,66 @@ def handle_recurring_task(reply_token: str, match: re.Match, group_id: str, adde
         # 將系統格式轉換為用戶友好的文字
         user_friendly_pattern = recurrence_pattern
 
-        reply_text = f"✅ 已為 {member.name} 新增定期任務：\n內容：{task.content}\n任務ID：T-{task.id}\n"
-        reply_text += f"優先級：{priority_emoji} {priority_text}\n"
-        reply_text += f"重複模式：每{user_friendly_pattern}\n"
-        reply_text += f"輸入「#取消定期 T-{task.id}」可取消定期任務"
-
-        line_bot_api.reply_message(reply_token, TextSendMessage(text=reply_text))
+        # 創建 Flex 消息來顯示定期任務創建結果
+        try:
+            contents = {
+                "type": "bubble",
+                "header": {
+                    "type": "box", "layout": "vertical",
+                    "contents": [
+                        {"type": "text", "text": "已新增定期任務", "weight": "bold", "size": "xl", "color": "#9C27B0"}
+                    ]
+                },
+                "body": {
+                    "type": "box", "layout": "vertical",
+                    "contents": [
+                        {"type": "text", "text": f"已為 {member.name} 新增定期任務", "weight": "bold", "wrap": True},
+                        {"type": "box", "layout": "horizontal", "margin": "md", "contents": [
+                            {"type": "text", "text": "任務ID:", "size": "sm", "color": "#888888", "flex": 2},
+                            {"type": "text", "text": f"T-{task.id}", "size": "sm", "color": "#111111", "flex": 4, "weight": "bold"}
+                        ]},
+                        {"type": "box", "layout": "horizontal", "margin": "sm", "contents": [
+                            {"type": "text", "text": "內容:", "size": "sm", "color": "#888888", "flex": 2},
+                            {"type": "text", "text": task.content, "size": "sm", "color": "#111111", "flex": 4, "wrap": True}
+                        ]},
+                        {"type": "box", "layout": "horizontal", "margin": "sm", "contents": [
+                            {"type": "text", "text": "優先級:", "size": "sm", "color": "#888888", "flex": 2},
+                            {"type": "text", "text": f"{priority_emoji} {priority_text}", "size": "sm", "color": "#111111", "flex": 4}
+                        ]},
+                        {"type": "box", "layout": "horizontal", "margin": "sm", "contents": [
+                            {"type": "text", "text": "重複模式:", "size": "sm", "color": "#888888", "flex": 2},
+                            {"type": "text", "text": f"每{user_friendly_pattern}", "size": "sm", "color": "#9C27B0", "flex": 4, "weight": "bold"}
+                        ]}
+                    ]
+                },
+                "footer": {
+                    "type": "box", "layout": "vertical", "spacing": "sm",
+                    "contents": [
+                        {
+                            "type": "button", "style": "primary", "color": "#9C27B0",
+                            "action": {"type": "message", "label": "查看任務詳情", "text": f"#詳情 T-{task.id}"}
+                        },
+                        {
+                            "type": "button", "style": "secondary", "color": "#FF5722",
+                            "action": {"type": "message", "label": "取消定期任務", "text": f"#取消定期 T-{task.id}"}
+                        }
+                    ]
+                }
+            }
+            
+            line_bot_api.reply_message(reply_token, FlexSendMessage(alt_text="已新增定期任務", contents=contents))
+        except Exception as e:
+            logger.exception(f"發送定期任務結果 Flex 訊息失敗: {e}")
+            # 如果 Flex 訊息失敗，使用純文字訊息
+            reply_text = f"✅ 已為 {member.name} 新增定期任務：\n內容：{task.content}\n任務ID：T-{task.id}\n"
+            reply_text += f"優先級：{priority_emoji} {priority_text}\n"
+            reply_text += f"重複模式：每{user_friendly_pattern}\n"
+            reply_text += f"輸入「#取消定期 T-{task.id}」可取消定期任務"
+            line_bot_api.reply_message(reply_token, TextSendMessage(text=reply_text))
     except Exception as e:
         logger.exception(f"新增定期任務到資料庫時失敗: {e}")
         db.rollback()
         line_bot_api.reply_message(reply_token, TextSendMessage(text="新增定期任務失敗，請稍後再試。"))
-
 
 def handle_cancel_recurring_task(reply_token: str, match: re.Match, group_id: str, user_id: str, db: Session):
     """處理取消定期任務"""
@@ -1229,8 +1541,9 @@ def send_recurring_template(reply_token: str):
     help_text = (
         "📝 如何新增定期任務 📝\n\n"
         "🔹 定期任務：\n"
+        "  #定期 @成員名稱 !優先級 任務內容 每天\n"
         "  #定期 @成員名稱 !優先級 任務內容 每週一\n"
-        "  (可用：每週一~日、每月1日、每年1月1日)\n\n"
+        "  (可用：每天、每週一~日、每月1日、每年1月1日)\n\n"
         "🔸 優先級可選項：!低、!普通、!高"
     )
 
@@ -1250,20 +1563,20 @@ def send_recurring_template(reply_token: str):
                     "contents": [
                         {
                             "type": "button", "style": "primary", "color": "#28a745", "height": "sm", "flex": 1,
-                            "action": {"type": "message", "label": "!低優先級", "text": "#新增模板 !低"}
+                            "action": {"type": "message", "label": "!低優先級", "text": "#要新增定期 !低"}
                         },
                         {
                             "type": "button", "style": "primary", "color": "#ffc107", "height": "sm", "flex": 1, "margin": "md",
-                            "action": {"type": "message", "label": "!普通優先級", "text": "#新增模板 !普通"}
+                            "action": {"type": "message", "label": "!普通優先級", "text": "#要新增定期 !普通"}
                         },
                         {
                             "type": "button", "style": "primary", "color": "#dc3545", "height": "sm", "flex": 1, "margin": "md",
-                            "action": {"type": "message", "label": "!高優先級", "text": "#新增模板 !高"}
+                            "action": {"type": "message", "label": "!高優先級", "text": "#要新增定期 !高"}
                         }
                     ]
                 },
                 {
-                    "type": "text", "text": "定期任務",
+                    "type": "text", "text": "選擇重複模式",
                     "size": "md", "weight": "bold", "margin": "xl"
                 },
                 {
@@ -1271,7 +1584,24 @@ def send_recurring_template(reply_token: str):
                     "contents": [
                         {
                             "type": "button", "style": "secondary", "color": "#9C27B0", "height": "sm", "flex": 1,
-                            "action": {"type": "message", "label": "定期任務模板", "text": "#定期模板"}
+                            "action": {"type": "message", "label": "每天", "text": "#要新增定期 每天"}
+                        },
+                        {
+                            "type": "button", "style": "secondary", "color": "#9C27B0", "height": "sm", "flex": 1, "margin": "md",
+                            "action": {"type": "message", "label": "每週一", "text": "#要新增定期 每週一"}
+                        }
+                    ]
+                },
+                {
+                    "type": "box", "layout": "horizontal", "margin": "md",
+                    "contents": [
+                        {
+                            "type": "button", "style": "secondary", "color": "#9C27B0", "height": "sm", "flex": 1,
+                            "action": {"type": "message", "label": "每月1日", "text": "#要新增定期 每月1日"}
+                        },
+                        {
+                            "type": "button", "style": "secondary", "color": "#9C27B0", "height": "sm", "flex": 1, "margin": "md",
+                            "action": {"type": "message", "label": "每年1月1日", "text": "#要新增定期 每年1月1日"}
                         }
                     ]
                 }
@@ -1315,6 +1645,8 @@ def api_generate_recurring_tasks():
     weekly_pattern = day_map.get(day_of_week)
     monthly_pattern = f"monthly_{day_of_month}"
     yearly_pattern = f"yearly_{month_and_day}"
+    # 新增每天模式
+    daily_pattern = "daily"
 
     created_tasks = []
 
@@ -1324,6 +1656,7 @@ def api_generate_recurring_tasks():
             recurring_tasks = db.query(Task).filter(
                 Task.is_recurring == True,
                 (
+                    (Task.recurrence_pattern == daily_pattern) |  # 新增每天模式
                     (Task.recurrence_pattern == weekly_pattern) |
                     (Task.recurrence_pattern == monthly_pattern) |
                     (Task.recurrence_pattern == yearly_pattern)
@@ -1363,7 +1696,17 @@ def api_generate_recurring_tasks():
                 # 發送通知訊息
                 notification = "🔄 已生成今日定期任務：\n"
                 for task in created_tasks[:10]:  # 最多顯示10個
-                    notification += f"· T-{task['id']} ({task['member_name']}): {task['content']}\n"
+                    pattern_text = ""
+                    if task['pattern'] == "daily":
+                        pattern_text = "每天"
+                    elif task['pattern'].startswith("weekly_"):
+                        day = task['pattern'].split("_")[1]
+                        day_map_reverse = {
+                            "monday": "週一", "tuesday": "週二", "wednesday": "週三", 
+                            "thursday": "週四", "friday": "週五", "saturday": "週六", "sunday": "週日"
+                        }
+                        pattern_text = f"每{day_map_reverse.get(day, day)}"
+                    notification += f"· T-{task['id']} ({task['member_name']}): {task['content']} ({pattern_text})\n"
 
                 if len(created_tasks) > 10:
                     notification += f"...(等共計 {len(created_tasks)} 個任務)"
@@ -1622,11 +1965,11 @@ def send_recurring_task_form(reply_token: str, db: Session, group_id: str):
                                         "action": {"type": "message", "label": "週一", "text": "#要新增定期 每週一"}
                                     },
                                     {
-                                        "type": "button", "style": "secondary", "height": "sm", "flex": 1,
+                                        "type": "button", "style": "secondary", "height": "sm", "flex": 1, "margin": "md",
                                         "action": {"type": "message", "label": "週二", "text": "#要新增定期 每週二"}
                                     },
                                     {
-                                        "type": "button", "style": "secondary", "height": "sm", "flex": 1,
+                                        "type": "button", "style": "secondary", "height": "sm", "flex": 1, "margin": "md",
                                         "action": {"type": "message", "label": "週三", "text": "#要新增定期 每週三"}
                                     }
                                 ]
@@ -1639,11 +1982,11 @@ def send_recurring_task_form(reply_token: str, db: Session, group_id: str):
                                         "action": {"type": "message", "label": "週四", "text": "#要新增定期 每週四"}
                                     },
                                     {
-                                        "type": "button", "style": "secondary", "height": "sm", "flex": 1,
+                                        "type": "button", "style": "secondary", "height": "sm", "flex": 1, "margin": "md",
                                         "action": {"type": "message", "label": "週五", "text": "#要新增定期 每週五"}
                                     },
                                     {
-                                        "type": "button", "style": "secondary", "height": "sm", "flex": 1,
+                                        "type": "button", "style": "secondary", "height": "sm", "flex": 1, "margin": "md",
                                         "action": {"type": "message", "label": "週六", "text": "#要新增定期 每週六"}
                                     }
                                 ]
@@ -1663,7 +2006,7 @@ def send_recurring_task_form(reply_token: str, db: Session, group_id: str):
                                         "action": {"type": "message", "label": "每月1日", "text": "#要新增定期 每月1日"}
                                     },
                                     {
-                                        "type": "button", "style": "secondary", "height": "sm", "flex": 1,
+                                        "type": "button", "style": "secondary", "height": "sm", "flex": 1, "margin": "md",
                                         "action": {"type": "message", "label": "每月15日", "text": "#要新增定期 每月15日"}
                                     }
                                 ]
@@ -1854,3 +2197,113 @@ def handle_pre_recurring_task(reply_token: str, match: re.Match, group_id: str, 
         reply_text += "\n請選擇優先級 (!低 / !普通 / !高)"
 
     line_bot_api.reply_message(reply_token, TextSendMessage(text=reply_text))
+
+# --- 添加簡單任務處理函數 ---
+
+def handle_simple_task(reply_token: str, match: re.Match, group_id: str, user_id: str, db: Session):
+    """處理簡單的任務添加命令"""
+    task_content = match.group(1)
+    
+    # 檢查是否有成員資訊
+    members = db.query(Member).filter(Member.group_id == group_id).all()
+    
+    # 如果群組中只有一個成員，則直接指派給該成員，否則需要請用戶選擇成員
+    if len(members) == 1:
+        member = members[0]
+        
+        # 儲存任務信息到會話
+        session = {
+            'member_id': member.id,
+            'content': task_content,
+            'awaiting_priority': True
+        }
+        save_session(user_id, group_id, session)
+        
+        # 發送優先級選擇訊息
+        contents = {
+            "type": "bubble",
+            "header": {
+                "type": "box", "layout": "vertical",
+                "contents": [{"type": "text", "text": "請選擇任務優先級", "weight": "bold", "size": "lg"}]
+            },
+            "body": {
+                "type": "box", "layout": "vertical",
+                "contents": [
+                    {"type": "text", "text": f"任務：{task_content}", "wrap": True, "margin": "md", "size": "md", "weight": "bold"},
+                    {"type": "text", "text": f"成員：{member.name}", "wrap": True, "margin": "md", "size": "md"},
+                    {"type": "box", "layout": "horizontal", "margin": "xl", "contents": [
+                        {
+                            "type": "button", "style": "primary", "color": "#28a745", "flex": 1,
+                            "action": {"type": "message", "label": "低優先級", "text": "低"}
+                        },
+                        {
+                            "type": "button", "style": "primary", "color": "#ffc107", "flex": 1, "margin": "md",
+                            "action": {"type": "message", "label": "普通優先級", "text": "普通"}
+                        },
+                        {
+                            "type": "button", "style": "primary", "color": "#dc3545", "flex": 1, "margin": "md",
+                            "action": {"type": "message", "label": "高優先級", "text": "高"}
+                        }
+                    ]}
+                ]
+            }
+        }
+        
+        try:
+            line_bot_api.reply_message(reply_token, FlexSendMessage(alt_text="選擇任務優先級", contents=contents))
+        except Exception as e:
+            logger.exception(f"發送優先級選擇 Flex 訊息失敗: {e}")
+            line_bot_api.reply_message(reply_token, TextSendMessage(text=f"請選擇任務「{task_content}」的優先級：\n1. 低\n2. 普通\n3. 高"))
+    else:
+        # 多個成員或沒有成員的情況，發送成員選擇表單
+        contents = {
+            "type": "bubble",
+            "header": {
+                "type": "box", "layout": "vertical",
+                "contents": [{"type": "text", "text": "請選擇負責成員", "weight": "bold", "size": "lg"}]
+            },
+            "body": {
+                "type": "box", "layout": "vertical",
+                "contents": [
+                    {"type": "text", "text": f"任務：{task_content}", "wrap": True, "margin": "md", "size": "md", "weight": "bold"},
+                    {"type": "box", "layout": "vertical", "margin": "xl", "contents": []}
+                ]
+            }
+        }
+        
+        # 添加成員按鈕
+        member_contents = contents["body"]["contents"][1]["contents"]
+        
+        if members:
+            # 每行最多3個按鈕
+            buttons_per_row = 2
+            member_rows = [members[i:i+buttons_per_row] for i in range(0, len(members), buttons_per_row)]
+            
+            for row in member_rows:
+                row_buttons = []
+                for member in row:
+                    row_buttons.append({
+                        "type": "button", "style": "secondary", "height": "sm", "flex": 1,
+                        "action": {"type": "message", "label": member.name, "text": f"#新增 @{member.name} {task_content}"}
+                    })
+                
+                # 如果按鈕不足一行，添加填充
+                while len(row_buttons) < buttons_per_row:
+                    row_buttons.append({"type": "filler"})
+                
+                member_contents.append({
+                    "type": "box", "layout": "horizontal", "margin": "sm", "contents": row_buttons
+                })
+        else:
+            # 沒有成員的情況
+            member_contents.append({
+                "type": "text", "text": "群組中還沒有成員，請先添加成員", "size": "sm", "color": "#888888", "align": "center"
+            })
+        
+        try:
+            line_bot_api.reply_message(reply_token, FlexSendMessage(alt_text="選擇負責成員", contents=contents))
+        except Exception as e:
+            logger.exception(f"發送成員選擇 Flex 訊息失敗: {e}")
+            # 使用純文字訊息作為備選方案
+            member_text = "\n".join([f"{i+1}. {m.name}" for i, m in enumerate(members)])
+            line_bot_api.reply_message(reply_token, TextSendMessage(text=f"請選擇負責成員：\n{member_text}\n\n請使用 #新增 @成員名稱 {task_content} 來分配任務"))
