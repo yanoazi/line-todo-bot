@@ -47,3 +47,6 @@ args = "python app.py"
 localPort = 7777
 externalPort = 80
 
+[deployment]
+deploymentTarget = "gce"
+
