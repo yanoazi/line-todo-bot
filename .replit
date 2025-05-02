@@ -4,7 +4,7 @@ run = "python3 app.py"
 language = "python3"
 entrypoint = "app.py"
 hidden = [".config", "**/__pycache__", "**/.mypy_cache", "**/*.pyc"]
-modules = ["python-3.11"]
+modules = ["python-3.11", "postgresql-16"]
 
 [nix]
 channel = "stable-22_11"
