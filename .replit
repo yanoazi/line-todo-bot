@@ -2,6 +2,7 @@ run = "python app.py"
 language = "python3"
 entrypoint = "app.py"
 hidden = [".config", "**/__pycache__", "**/.mypy_cache", "**/*.pyc"]
+modules = ["python-3.11"]
 
 [nix]
 channel = "stable-22_11"
@@ -26,3 +27,19 @@ syntax = "python"
 
 [languages.python3.languageServer]
 start = ["pylsp"] 
+
+[workflows]
+runButton = "Run"
+
+[[workflows.workflow]]
+name = "Run"
+author = 41504860
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 app.py"
+
+[[ports]]
+localPort = 8080
+externalPort = 80
