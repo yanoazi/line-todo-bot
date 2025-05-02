@@ -17,7 +17,7 @@ from models import (
     get_pending_tasks_by_member_id, get_pending_tasks_by_group_id,
     create_member, create_task
 )
-from sqlalchemy import text, or_,orm
+from sqlalchemy import text, or_, orm
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -292,8 +292,7 @@ def parse_recurrence_input(text: str) -> (Optional[str], Optional[str]):
             if match: month, day = int(match.group(1)), int(match.group(2));
                 if 1 <= month <= 12 and 1 <= day <= 31: system_pattern = f"yearly_{month}_{day}"; user_friendly_pattern = f"每年{month}月{day}日"
         except (ValueError, IndexError):
-             pass # Correctly indented pass for the except block
-    # Correctly indented logger and return
+             pass
     logger.debug(f"Parsed recurrence input '{text}' to system='{system_pattern}', user='{user_friendly_pattern}'")
     return system_pattern, user_friendly_pattern
 
