@@ -1,10 +1,11 @@
-# .replit
+# .replit (Corrected Version)
 
+# Defines the command when you press the main "Run" button (for development)
 run = "python3 app.py"
 language = "python3"
 entrypoint = "app.py"
 hidden = [".config", "**/__pycache__", "**/.mypy_cache", "**/*.pyc"]
-modules = ["python-3.11", "postgresql-16"]
+modules = ["python-3.11", "postgresql-16"] # Keep as is
 
 [nix]
 channel = "stable-22_11"
@@ -13,8 +14,8 @@ packages = ["cacert"]
 [env]
 PYTHONPATH = "$PYTHONPATH:${REPL_HOME}"
 PATH = "${REPL_HOME}/venv/bin:${PATH}"
-# --- 修改這裡設定你想要的端口 ---
-PORT = "7777"  # 例如，設定為 5000
+# Set the internal port Flask will listen on. Replit maps this automatically.
+PORT = "7777"
 
 [packager]
 language = "python3"
@@ -31,23 +32,18 @@ syntax = "python"
 [languages.python3.languageServer]
 start = ["pylsp"]
 
-[workflows]
-runButton = "Run"
+# Removed [workflows] section for simplicity, using top-level 'run' instead.
 
-[[workflows.workflow]]
-name = "Run"
-author = 41504860
-mode = "sequential"
+# Removed [[ports]] section, let Replit handle mapping.
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python app.py"
+[deployment]
+# Specifies the deployment target (Reserved VM)
+deploymentTarget = "gce"
+# --- CORRECTED run command for deployment using sh -c ---
+# Use 'sh -c' to ensure the shell evaluates $PORT before passing it to gunicorn
+run = ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:$PORT --workers 3"]
 
 [[ports]]
 localPort = 7777
 externalPort = 80
-
-[deployment]
-deploymentTarget = "gce"
-run = ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:7777 --workers 4"]
-
+# --- End Correction ---
